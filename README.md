@@ -12,6 +12,8 @@ Lima is a modern, full-stack AI-powered voice note assistant that records audio 
 
 </div>
 
+<img width="780" height="764" alt="Screenshot 2026-08-06 at 23 32 11" src="https://github.com/user-attachments/assets/38fa0a1f-7b08-4d57-a3db-80856de2f9e7" />
+
 ## Overview
 Lima streamlines your thought capture by converting unstructured audio memos into professional, actionable intelligence. Built with an optimized App Router architecture, it bridges high-performance client-side audio recording with lightning-fast cloud inference.
 
