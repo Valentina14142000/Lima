@@ -55,7 +55,6 @@ Create a `.env.local` file in the root directory and add your Groq API key:
 ```env
 GROQ_API_KEY=your_groq_api_key_here
 ```
-*(You can get a free API key at [console.groq.com](https://console.groq.com))*
 
 ### 4. Run the development server
 ```bash
