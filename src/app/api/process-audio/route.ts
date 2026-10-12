@@ -16,17 +16,18 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const rawFile = formData.get("file") as Blob | File | null;
 
-    if (!rawFile) {
-      return NextResponse.json({ error: "No audio file provided" }, { status: 400 });
+    if (!rawFile || rawFile.size === 0) {
+      return NextResponse.json(
+        { error: "Audio recording was empty or missing. Please try recording again." },
+        { status: 400 }
+      );
     }
 
-    // Write buffer to a secure temporary file path on the server
     const bytes = await rawFile.arrayBuffer();
     const buffer = Buffer.from(bytes);
     tempFilePath = join(tmpdir(), `upload-${Date.now()}.webm`);
     await writeFile(tempFilePath, buffer);
 
-    // Pass the file stream directly to Groq Whisper
     const fileStream = createReadStream(tempFilePath);
 
     const transcription = await groq.audio.transcriptions.create({
@@ -34,12 +35,17 @@ export async function POST(req: NextRequest) {
       model: "whisper-large-v3-turbo",
     });
 
-    // Clean up temporary file
     await unlink(tempFilePath).catch(() => {});
 
     const transcriptText = transcription.text;
 
-    // Structure output with Groq Llama 3
+    if (!transcriptText || transcriptText.trim() === "") {
+      return NextResponse.json({
+        transcript: "",
+        result: { summary: "No speech detected in the recording.", actionItems: [], deadlines: [] },
+      });
+    }
+
     const completion = await groq.chat.completions.create({
       messages: [
         {
@@ -49,7 +55,7 @@ export async function POST(req: NextRequest) {
         },
         { role: "user", content: transcriptText },
       ],
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-120b",
       response_format: { type: "json_object" },
     });
 
