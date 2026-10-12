@@ -9,21 +9,30 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
-    const file = formData.get("file") as File;
+    const rawFile = formData.get("file") as Blob | File | null;
 
-    if (!file) {
+    if (!rawFile) {
       return NextResponse.json({ error: "No audio file provided" }, { status: 400 });
     }
 
-    // 1. Transcribe audio using Groq's free Whisper endpoint
+    // Convert raw blob into a proper File instance with explicit name and mime type
+    const buffer = Buffer.from(await rawFile.arrayBuffer());
+    const mimeType = rawFile.type || "audio/webm";
+    const extension = mimeType.includes("wav") ? "wav" : mimeType.includes("mp3") ? "mp3" : "webm";
+    
+    const formattedFile = new File([buffer], `recording.${extension}`, {
+      type: mimeType,
+    });
+
+    // 1. Transcribe audio using Groq's Whisper endpoint
     const transcription = await groq.audio.transcriptions.create({
-      file: file,
+      file: formattedFile,
       model: "whisper-large-v3-turbo",
     });
 
     const transcriptText = transcription.text;
 
-    // 2. Structure action items and summaries using Groq Llama 3
+    // 2. Extract action items and structure output using Groq Llama 3
     const completion = await groq.chat.completions.create({
       messages: [
         {
