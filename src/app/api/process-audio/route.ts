@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import Groq from "groq-sdk";
-import { writeFile, unlink } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
-import { createReadStream } from "fs";
+import Groq, { toFile } from "groq-sdk";
 
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
@@ -11,7 +7,6 @@ export const dynamic = "force-dynamic";
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 export async function POST(req: NextRequest) {
-  let tempFilePath = "";
   try {
     const formData = await req.formData();
     const rawFile = formData.get("file") as Blob | File | null;
@@ -23,19 +18,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const bytes = await rawFile.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    tempFilePath = join(tmpdir(), `upload-${Date.now()}.webm`);
-    await writeFile(tempFilePath, buffer);
+    const arrayBuffer = await rawFile.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
-    const fileStream = createReadStream(tempFilePath);
-
-    const transcription = await groq.audio.transcriptions.create({
-      file: fileStream as any,
-      model: "whisper-large-v3-turbo",
+    // Use Groq's official toFile helper to format the buffer correctly
+    const audioFile = await toFile(buffer, "audio.wav", {
+      type: "audio/wav",
     });
 
-    await unlink(tempFilePath).catch(() => {});
+    const transcription = await groq.audio.transcriptions.create({
+      file: audioFile,
+      model: "whisper-large-v3-turbo",
+    });
 
     const transcriptText = transcription.text;
 
@@ -65,9 +59,6 @@ export async function POST(req: NextRequest) {
       result: structuredData,
     });
   } catch (error: any) {
-    if (tempFilePath) {
-      await unlink(tempFilePath).catch(() => {});
-    }
     console.error("Audio processing error:", error);
     return NextResponse.json(
       { error: error.message || "Failed to process audio" },
