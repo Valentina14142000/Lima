@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import Groq from "groq-sdk";
+import { writeFile, unlink } from "fs/promises";
+import { join } from "path";
+import { tmpdir } from "os";
+import { createReadStream } from "fs";
 
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
@@ -7,6 +11,7 @@ export const dynamic = "force-dynamic";
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 export async function POST(req: NextRequest) {
+  let tempFilePath = "";
   try {
     const formData = await req.formData();
     const rawFile = formData.get("file") as Blob | File | null;
@@ -15,30 +20,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No audio file provided" }, { status: 400 });
     }
 
-    // Convert raw blob into a proper File instance with explicit name and mime type
-    const buffer = Buffer.from(await rawFile.arrayBuffer());
-    const mimeType = rawFile.type || "audio/webm";
-    const extension = mimeType.includes("wav") ? "wav" : mimeType.includes("mp3") ? "mp3" : "webm";
-    
-    const formattedFile = new File([buffer], `recording.${extension}`, {
-      type: mimeType,
-    });
+    // Write buffer to a secure temporary file path on the server
+    const bytes = await rawFile.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+    tempFilePath = join(tmpdir(), `upload-${Date.now()}.webm`);
+    await writeFile(tempFilePath, buffer);
 
-    // 1. Transcribe audio using Groq's Whisper endpoint
+    // Pass the file stream directly to Groq Whisper
+    const fileStream = createReadStream(tempFilePath);
+
     const transcription = await groq.audio.transcriptions.create({
-      file: formattedFile,
+      file: fileStream as any,
       model: "whisper-large-v3-turbo",
     });
 
+    // Clean up temporary file
+    await unlink(tempFilePath).catch(() => {});
+
     const transcriptText = transcription.text;
 
-    // 2. Extract action items and structure output using Groq Llama 3
+    // Structure output with Groq Llama 3
     const completion = await groq.chat.completions.create({
       messages: [
         {
           role: "system",
           content:
-            "You are an assistant that analyzes transcripts and extracts key summary points, action items, and deadlines into clean JSON format.",
+            "You are an assistant that analyzes transcripts and extracts key summary points, action items, and deadlines into clean JSON format with keys: summary, actionItems, deadlines.",
         },
         { role: "user", content: transcriptText },
       ],
@@ -53,6 +60,9 @@ export async function POST(req: NextRequest) {
       result: structuredData,
     });
   } catch (error: any) {
+    if (tempFilePath) {
+      await unlink(tempFilePath).catch(() => {});
+    }
     console.error("Audio processing error:", error);
     return NextResponse.json(
       { error: error.message || "Failed to process audio" },
