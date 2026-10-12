@@ -49,14 +49,13 @@ export async function POST(req: NextRequest) {
     const completion = await groq.chat.completions.create({
       messages: [
         {
-          role: "system",
-          content:
-            "You are an assistant that analyzes transcripts and extracts key summary points, action items, and deadlines into clean JSON format with keys: summary, actionItems, deadlines.",
+          role: "user",
+          content: `Analyze this transcript and extract key summary points, action items, and deadlines into a JSON object with keys: summary, actionItems, deadlines. Transcript: "${transcriptText}"`,
         },
-        { role: "user", content: transcriptText },
       ],
-      model: "openai/gpt-oss-120b",
+      model: "openai/gpt-oss-20b",
       response_format: { type: "json_object" },
+      reasoning_format: "hidden",
     });
 
     const structuredData = JSON.parse(completion.choices[0].message.content || "{}");
