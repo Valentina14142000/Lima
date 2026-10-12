@@ -21,11 +21,12 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await rawFile.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Use Groq's official toFile helper to format the buffer correctly
+    // Format binary audio stream for Groq Whisper
     const audioFile = await toFile(buffer, "audio.wav", {
       type: "audio/wav",
     });
 
+    // 1. Audio Transcription via Groq Whisper
     const transcription = await groq.audio.transcriptions.create({
       file: audioFile,
       model: "whisper-large-v3-turbo",
@@ -40,16 +41,21 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // 2. Action Item Extraction via Standard Free Groq Model
     const completion = await groq.chat.completions.create({
       messages: [
         {
+          role: "system",
+          content:
+            "You are an assistant that analyzes transcripts and extracts key summary points, action items, and deadlines into clean JSON format with keys: summary, actionItems, deadlines.",
+        },
+        {
           role: "user",
-          content: `Analyze this transcript and extract key summary points, action items, and deadlines into a JSON object with keys: summary, actionItems, deadlines. Transcript: "${transcriptText}"`,
+          content: transcriptText,
         },
       ],
-      model: "openai/gpt-oss-20b",
+      model: "llama-3.1-8b-instant",
       response_format: { type: "json_object" },
-      reasoning_format: "hidden",
     });
 
     const structuredData = JSON.parse(completion.choices[0].message.content || "{}");
