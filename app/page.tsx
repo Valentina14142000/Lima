@@ -14,7 +14,8 @@ export default function Home() {
     audioChunksRef.current = [];
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].find((t) => MediaRecorder.isTypeSupported(t));
+      const mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (event) => {
@@ -24,7 +25,7 @@ export default function Home() {
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType || 'audio/webm' });
         await sendAudioToServer(audioBlob);
       };
 
@@ -45,9 +46,14 @@ export default function Home() {
   };
 
   const sendAudioToServer = async (blob: Blob) => {
+    if (blob.size < 2000) {
+      alert('That recording was too short or silent. Speak for at least a second, then tap stop.');
+      return;
+    }
     setLoading(true);
+    const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
     const formData = new FormData();
-    formData.append('audio', blob, 'voice-note.webm');
+    formData.append('file', blob, `voice-note.${ext}`);
 
     try {
       const res = await fetch('/api/process-audio', {
